@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"sync"
 )
@@ -28,38 +29,54 @@ func NewSever(ip string, port int64) *Server {
 }
 
 //監聽Message廣播的channel的goroutine，一旦有訊息需發送給OnlineMap全部的在線user
-func (this *Server) ListenMessager() {
+func (server *Server) ListenMessager() {
 	for {
-		msg := <-this.Message
+		msg := <-server.Message
 		//將message發送給全部的在線user
-		this.mapLock.Lock()
-		for _, client := range this.OnlineMap {
+		server.mapLock.Lock()
+		for _, client := range server.OnlineMap {
 			client.C <- msg
 		}
-		this.mapLock.Unlock()
+		server.mapLock.Unlock()
 	}
 }
 
 //廣播訊息給全部的在線user
-func (this *Server) BoardCast(user *User, msg string) {
+func (server *Server) BoardCast(user *User, msg string) {
 	sendMsg := "[" + user.Addr + "]" + user.Name + ":" + msg
-	this.Message <- sendMsg
+	server.Message <- sendMsg
 }
 
-func (this *Server) Handler(conn net.Conn) {
+func (server *Server) Handler(conn net.Conn) {
 	//fmt.Println("連接成功.........")
-	//用戶上線成功,加入OnlineMap中
-	user := NewUser(conn)
-	this.mapLock.Lock()
-	this.OnlineMap[user.Name] = user
-	this.mapLock.Unlock()
-	//廣播當前用戶訊息
-	this.BoardCast(user, " Online")
+	user := NewUser(conn, server)
+	user.Online()
+
+	//接受客戶端發送的訊息
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			n, err := conn.Read(buf)
+			//表示客戶端close
+			if n == 0 {
+				user.Offline()
+				return
+			}
+			if err != nil && err != io.EOF {
+				fmt.Println("Conn Read Error:", err)
+				return
+			}
+			//提取用戶的消息(去除'\n')
+			msg := string(buf[:n-1])
+			//將取到的訊息進行廣播
+			user.SendMessage(msg)
+		}
+	}()
 }
 
-func (this *Server) Start() {
+func (server *Server) Start() {
 	//socket listen
-	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", this.Ip, this.Port))
+	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", server.Ip, server.Port))
 	if err != nil {
 		fmt.Println("net listen error:", err)
 	}
@@ -67,7 +84,7 @@ func (this *Server) Start() {
 	//close  listen socket
 	defer listener.Close()
 	//啟動監聽Message的gorutine
-	go this.ListenMessager()
+	go server.ListenMessager()
 
 	for {
 		//accept
@@ -78,7 +95,7 @@ func (this *Server) Start() {
 		}
 
 		//do handler
-		this.Handler(conn)
+		server.Handler(conn)
 	}
 
 }
