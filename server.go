@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 )
 
 type Server struct {
@@ -51,6 +52,8 @@ func (server *Server) Handler(conn net.Conn) {
 	//fmt.Println("連接成功.........")
 	user := NewUser(conn, server)
 	user.Online()
+	//用戶是否活躍的channel
+	isLive := make(chan bool)
 
 	//接受客戶端發送的訊息
 	go func() {
@@ -70,8 +73,27 @@ func (server *Server) Handler(conn net.Conn) {
 			msg := string(buf[:n-1])
 			//將取到的訊息進行訊息處理
 			user.DoMessage(msg)
+			//用戶有發送訊息，表示活耀
+			isLive <- true
 		}
 	}()
+
+	for {
+		select {
+		case <-isLive:
+		case <-time.After(time.Second * 10):
+			//已超時,
+			//將當前用戶強制關閉
+			user.SendMessage("Your are been kick")
+
+			//關閉資源
+			close(user.C)
+			//關閉連接
+			conn.Close()
+			//退出當前Handler
+			return
+		}
+	}
 }
 
 func (server *Server) Start() {
