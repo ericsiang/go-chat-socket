@@ -1,6 +1,8 @@
 package main
 
-import "net"
+import (
+	"net"
+)
 
 type User struct {
 	Name   string
@@ -21,7 +23,7 @@ func NewUser(conn net.Conn, server *Server) *User {
 		server: server,
 	}
 	//啟動監聽該user channel
-	go user.ListenMessage()
+	go user.ListenUserMessager()
 
 	return user
 }
@@ -46,14 +48,32 @@ func (user *User) Offline() {
 	user.server.BoardCast(user, " Leave")
 }
 
-//廣播發送訊息
+////給當前用戶發送訊息
 func (user *User) SendMessage(msg string) {
-	//發送廣播訊息給當前上線用戶
-	user.server.BoardCast(user, msg)
+	user.conn.Write([]byte(msg))
+}
+
+//廣播發送訊息
+func (user *User) DoMessage(msg string) {
+	if msg == "who" {
+		//查詢當前上線用戶
+		user.server.mapLock.Lock()
+		for _, tihsUser := range user.server.OnlineMap {
+			//寫法一
+			//onlineMsg := "[" + tihsUser.Addr + "]" + tihsUser.Name + ":" + "Online Now...\n"
+			//user.SendMessage(onlineMsg)
+			//寫法二
+			user.C <- "[" + tihsUser.Addr + "]" + tihsUser.Name + ":" + "Online Now...\n"
+		}
+		user.server.mapLock.Unlock()
+	} else {
+		//發送廣播訊息給當前上線用戶
+		user.server.BoardCast(user, msg)
+	}
 }
 
 //監聽當前user channel，一旦有消息，就立刻發送給客戶端
-func (user *User) ListenMessage() {
+func (user *User) ListenUserMessager() {
 	for {
 		msg := <-user.C
 		user.conn.Write([]byte(msg + "\n"))

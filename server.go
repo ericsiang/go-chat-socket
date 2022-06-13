@@ -29,7 +29,7 @@ func NewSever(ip string, port int64) *Server {
 }
 
 //監聽Message廣播的channel的goroutine，一旦有訊息需發送給OnlineMap全部的在線user
-func (server *Server) ListenMessager() {
+func (server *Server) ListenBoardCastMessager() {
 	for {
 		msg := <-server.Message
 		//將message發送給全部的在線user
@@ -68,8 +68,8 @@ func (server *Server) Handler(conn net.Conn) {
 			}
 			//提取用戶的消息(去除'\n')
 			msg := string(buf[:n-1])
-			//將取到的訊息進行廣播
-			user.SendMessage(msg)
+			//將取到的訊息進行訊息處理
+			user.DoMessage(msg)
 		}
 	}()
 }
@@ -84,7 +84,7 @@ func (server *Server) Start() {
 	//close  listen socket
 	defer listener.Close()
 	//啟動監聽Message的gorutine
-	go server.ListenMessager()
+	go server.ListenBoardCastMessager()
 
 	for {
 		//accept
