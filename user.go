@@ -61,14 +61,12 @@ func (user *User) DoMessage(msg string) {
 		user.server.mapLock.Lock()
 		for _, tihsUser := range user.server.OnlineMap {
 			//寫法一
-			//onlineMsg := "[" + tihsUser.Addr + "]" + tihsUser.Name + ":" + "Online Now...\n"
-			//user.SendMessage(onlineMsg)
-			//寫法二
-			user.C <- "[" + tihsUser.Addr + "]" + tihsUser.Name + ":" + "Online Now...\n"
+			onlineMsg := "[" + tihsUser.Addr + "]" + tihsUser.Name + ":" + "Online Now...\n"
+			user.SendMessage(onlineMsg)
 		}
 		user.server.mapLock.Unlock()
 	} else if len(msg) > 7 && msg[:7] == "rename|" {
-		//訊息格式rename|阿翔
+		//訊息格式 => rename|newName
 		newName := strings.Split(msg, "|")[1]
 		//判斷用戶名是否存在
 		_, ok := user.server.OnlineMap[newName]
@@ -81,8 +79,31 @@ func (user *User) DoMessage(msg string) {
 			user.server.mapLock.Unlock()
 
 			user.Name = newName
-			user.C <- "update user name success\n"
+			user.SendMessage("update user name success\n")
 		}
+	} else if len(msg) > 4 && msg[:3] == "to|" {
+		//訊息格式 => to|userName|message
+
+		spliteArr := strings.Split(msg, "|")
+		toUserName := spliteArr[1]
+		//1.獲取對方用戶名
+		if toUserName == "" {
+			user.SendMessage("format error ,the currect string is 'to|userName|message'\n")
+			return
+		}
+		//2.依用戶名，獲取該user對象
+		remoteUser, ok := user.server.OnlineMap[toUserName]
+		if !ok {
+			user.SendMessage("user not exist\n")
+			return
+		}
+		//3.獲取預發送的訊息，通過該user對象將訊息發送過去
+		toSendMsg := spliteArr[2]
+		if toSendMsg == "" {
+			user.SendMessage("message is empty\n")
+			return
+		}
+		remoteUser.SendMessage(user.Name + " send message to you :" + toSendMsg)
 	} else {
 		//發送廣播訊息給當前上線用戶
 		user.server.BoardCast(user, msg)
